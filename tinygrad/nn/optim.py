@@ -154,14 +154,12 @@ class LAMB(Optimizer):
   def __init__(self, params: list[Tensor], lr=0.001, b1=0.9, b2=0.999, eps=1e-6, weight_decay=0.0, adam=False, fused=FUSE_OPTIM):
     super().__init__(params, lr, fused)
     self.b1, self.b2, self.eps, self.wd, self.adam = b1, b2, eps, weight_decay, adam
-    self.b1_t, self.b2_t = (Tensor.ones((1,), dtype=dtypes.float32, device=self.device, requires_grad=False).contiguous() for _ in [b1, b2])
+    self.b1_t, self.b2_t = (Tensor.full((1,), b, dtype=dtypes.float32, device=self.device, requires_grad=False).contiguous() for b in [b1, b2])
     self.m = self._new_optim_param()
     self.v = self._new_optim_param()
 
   def _step(self, params:list[Tensor], grads:list[Tensor]) -> tuple[list[Tensor], list[Tensor]]:
     ret = []
-    self.b1_t *= self.b1
-    self.b2_t *= self.b2
     for i, (t, g) in enumerate(zip(params, grads)):
       if g.device != self.m[i].device: g = g.contiguous().to(self.m[i].device)
       self.m[i].assign((self.b1 * self.m[i] + (1.0 - self.b1) * g).cast(self.m[i].dtype))
@@ -176,4 +174,6 @@ class LAMB(Optimizer):
       else:
         r = 1.0
       ret.append((t.detach() - self.lr * r * up).cast(t.dtype))
+    self.b1_t = self.b1_t * self.b1
+    self.b2_t = self.b2_t * self.b2
     return ret, [self.b1_t, self.b2_t] + self.m + self.v
